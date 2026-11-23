@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DARK CODE // Orchestrator</title>
+<meta name="description" content="로컬 Ollama 전문가 AI 6종을 자동 배정·검수·수정하는 DARK CODE 멀티 에이전트 오케스트레이터">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23000'/%3E%3Cpath d='M18 20 L30 32 L18 44' stroke='%2300FF66' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='32' y='40' width='16' height='5' rx='2' fill='%2300FF66'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css?v=20261123a">
+</head>
+<body>
+<canvas id="rain" aria-hidden="true"></canvas>
+
+<header class="top">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#000" stroke="#00FF66" stroke-width="2"/><path d="M18 20 L30 32 L18 44" stroke="#00FF66" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="32" y="40" width="16" height="5" rx="2" fill="#00FF66"/></svg>
+    <div>
+      <div class="brand-name">DARK CODE</div>
+      <div class="brand-sub">MULTI-AGENT ORCHESTRATOR</div>
+    </div>
+  </div>
+  <button id="connPill" class="pill pill-wait" type="button" title="연결 상태 다시 확인">
+    <span class="dot"></span><span id="connText">Ollama 확인 중</span>
+  </button>
+</header>
+
+<main class="wrap">
+  <section class="panel help" id="helpBox" hidden>
+    <h2>로컬 Ollama 연결이 필요해요</h2>
+    <p id="helpReason">이 페이지는 내 PC의 Ollama(http://localhost:11434)에 직접 요청을 보냅니다.</p>
+    <ol>
+      <li>Ollama가 켜져 있는지 확인 (작업 표시줄 트레이에 라마 아이콘)</li>
+      <li>명령 프롬프트(cmd)에 아래 한 줄 붙여넣고 Enter
+        <div class="cmd"><code id="originCmd">setx OLLAMA_ORIGINS "https://jake12733.github.io"</code><button class="mini" data-copy="originCmd" type="button">복사</button></div>
+      </li>
+      <li>트레이의 Ollama 아이콘 우클릭 → Quit → Ollama 다시 실행</li>
+      <li>이 페이지 새로고침</li>
+    </ol>
+    <p id="missingBox" class="warn" hidden></p>
+  </section>
+
+  <section class="panel composer">
+    <div class="pipeline" id="pipeline">
+      <div class="node" data-node="route"><span class="n-ico">01</span><span class="n-name">ROUTER</span><span class="n-sub" id="nRoute">대기</span></div>
+      <div class="link"></div>
+      <div class="node" data-node="worker"><span class="n-ico">02</span><span class="n-name">WORKER</span><span class="n-sub" id="nWorker">대기</span></div>
+      <div class="link"></div>
+      <div class="node" data-node="critic"><span class="n-ico">03</span><span class="n-name">CRITIC</span><span class="n-sub" id="nCritic">대기</span></div>
+      <div class="link"></div>
+      <div class="node" data-node="out"><span class="n-ico">04</span><span class="n-name">OUTPUT</span><span class="n-sub" id="nOut">대기</span></div>
+    </div>
+
+    <label class="sr" for="prompt">요청 입력</label>
+    <textarea id="prompt" rows="4" placeholder="무엇이든 요청하세요. 분야는 자동으로 배정됩니다.&#10;예) 치과 홍보용 15초 릴스 콘티 짜줘 / 비 오는 날 시티팝 가사 써줘 / 캔버스 벽돌깨기 게임 만들어줘"></textarea>
+
+    <div class="row">
+      <div class="opts">
+        <label class="chk" id="followWrap" hidden><input type="checkbox" id="follow" checked> 이어서 작업</label>
+        <label class="sel">수정 최대
+          <select id="maxRev"><option value="1">1회</option><option value="2" selected>2회</option><option value="3">3회</option></select>
+        </label>
+        <label class="chk" title="모델을 호출 직후 VRAM에서 내려 한 번에 하나만 올라가게 합니다"><input type="checkbox" id="saveMem" checked> 메모리 절약</label>
+        <button class="link-btn" id="settingsBtn" type="button">설정</button>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="stopBtn" type="button" disabled>중지</button>
+        <button class="btn" id="runBtn" type="button">실행 <kbd>Ctrl+Enter</kbd></button>
+      </div>
+    </div>
+
+    <div class="settings" id="settings" hidden>
+      <label>Ollama 주소 <input id="host" type="text" value="http://localhost:11434" spellcheck="false"></label>
+      <button class="btn ghost small" id="newChatBtn" type="button">새 작업 시작 (이전 상태 비우기)</button>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="col">
+      <article class="panel">
+        <h3><span class="tag">01</span>라우팅 결과</h3>
+        <div id="routeBox" class="muted">아직 실행 전입니다.</div>
+      </article>
+
+      <article class="panel">
+        <h3><span class="tag">02</span>검수 반복 횟수 및 수정 내역</h3>
+        <div id="roundBox" class="muted">검수 기록이 여기에 쌓입니다.</div>
+      </article>
+
+      <article class="panel">
+        <h3><span class="tag">04</span>상태 압축 <small>다음 작업에 이것만 넘깁니다</small></h3>
+        <pre id="stateBox" class="state muted">아직 없습니다.</pre>
+        <div class="row end"><button class="mini" data-copy="stateBox" type="button">복사</button></div>
+      </article>
+
+      <article class="panel">
+        <h3><span class="tag">LOG</span>실행 로그</h3>
+        <div id="logBox" class="log"></div>
+      </article>
+
+      <article class="panel">
+        <h3><span class="tag">REC</span>최근 작업</h3>
+        <ul id="histBox" class="hist"><li class="muted">기록 없음</li></ul>
+      </article>
+    </div>
+
+    <div class="col wide">
+      <article class="panel result">
+        <div class="result-head">
+          <h3><span class="tag">03</span>최종 결과물 <small id="resultMeta"></small></h3>
+          <div class="result-tools">
+            <button class="mini" id="rawBtn" type="button">원문 보기</button>
+            <button class="mini" data-copy="rawOut" type="button">전체 복사</button>
+          </div>
+        </div>
+        <details id="thinkBox" class="think" hidden>
+          <summary>생각 과정 보기</summary>
+          <pre id="thinkOut"></pre>
+        </details>
+        <div id="mdOut" class="md muted">결과가 여기에 실시간으로 표시됩니다.</div>
+        <pre id="rawOut" class="raw" hidden></pre>
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">DARK CODE Orchestrator · router → worker → critic · 모든 연산은 내 PC의 Ollama에서 실행됩니다</footer>
+
+<script src="assets/orchestrator.js?v=20261123a"></script>
+<script src="assets/app.js?v=20261123a"></script>
+</body>
+</html>
