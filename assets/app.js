@@ -218,6 +218,10 @@
   }
 
   /* ---------- 연결 확인 + 원클릭 연결 ---------- */
+  function orch() {
+    return new DCOrchestrator({ host: ui.host.value.trim(), maxRevisions: ui.maxRev.value, saveMemory: ui.saveMem.checked });
+  }
+
   var LS_CONNECTOR = 'dc-orch-connector';
   var CMD_WIN = 'powershell -ExecutionPolicy Bypass -c "irm https://jake12733.github.io/darkcode-orchestrator/connect/win.txt|iex"';
   var CMD_UNIX = 'curl -fsSL https://jake12733.github.io/darkcode-orchestrator/connect/unix.sh | sh';
