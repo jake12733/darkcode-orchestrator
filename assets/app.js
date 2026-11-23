@@ -217,41 +217,127 @@
     log('기록 불러옴: ' + h.input.slice(0, 40));
   }
 
-  /* ---------- 연결 확인 ---------- */
-  function orch() {
-    return new DCOrchestrator({ host: ui.host.value.trim(), maxRevisions: ui.maxRev.value, saveMemory: ui.saveMem.checked });
+  /* ---------- 연결 확인 + 원클릭 연결 ---------- */
+  var LS_CONNECTOR = 'dc-orch-connector';
+  var CMD_WIN = 'powershell -ExecutionPolicy Bypass -c "irm https://jake12733.github.io/darkcode-orchestrator/connect/win.txt|iex"';
+  var CMD_UNIX = 'curl -fsSL https://jake12733.github.io/darkcode-orchestrator/connect/unix.sh | sh';
+  var connState = '';
+  var pollTimer = null;
+  var cx = { title: $('cxTitle'), live: $('cxLive'), start: $('cxStart'), connect: $('cxConnect'), copyMain: $('cxCopyMain'), sub: $('cxSub'), cmd: $('cxCmd'), altText: $('cxAltText'), note: $('cxNote'), more: $('cxMore') };
+
+  function detectOS() {
+    var p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '').toLowerCase();
+    if (p.indexOf('win') !== -1) return 'win';
+    if (p.indexOf('mac') !== -1 || p.indexOf('iphone') !== -1 || p.indexOf('ipad') !== -1) return 'mac';
+    if (p.indexOf('android') !== -1) return 'mobile';
+    if (p.indexOf('linux') !== -1 || p.indexOf('x11') !== -1 || p.indexOf('cros') !== -1) return 'linux';
+    return 'win';
+  }
+  var OS = detectOS();
+
+  function setupConnectUI() {
+    if (OS === 'win') {
+      cx.connect.hidden = false; cx.copyMain.hidden = true;
+      cx.connect.textContent = '원클릭 연결 (Windows)';
+      cx.cmd.textContent = CMD_WIN;
+    } else if (OS === 'mobile') {
+      cx.connect.hidden = true; cx.copyMain.hidden = true;
+      cx.sub.textContent = 'Ollama는 PC에서 실행됩니다. 이 페이지를 Ollama가 설치된 PC 브라우저에서 열어 주세요.';
+      cx.more.hidden = true;
+    } else {
+      cx.connect.hidden = true; cx.copyMain.hidden = false;
+      cx.copyMain.textContent = '연결 명령어 복사 (' + (OS === 'mac' ? 'Mac' : 'Linux') + ')';
+      cx.sub.textContent = '터미널을 열고 붙여넣기(' + (OS === 'mac' ? 'Cmd' : 'Ctrl+Shift') + ' + V) → Enter. 설치 확인, 접속 허용, 재시작, 모델 준비까지 자동으로 끝나고 이 화면이 저절로 바뀝니다.';
+      cx.cmd.textContent = CMD_UNIX;
+      cx.altText.innerHTML = '터미널에 아래 명령어를 붙여넣고 <b>Enter</b>';
+      cx.note.innerHTML = 'Linux는 설정 중 sudo 비밀번호를 물을 수 있어요. 브라우저가 "로컬 네트워크 기기 접근"을 물으면 <b>허용</b>을 누르세요.';
+    }
   }
 
-  function checkConn() {
-    ui.conn.className = 'pill pill-wait';
-    ui.connText.textContent = 'Ollama 확인 중';
-    return orch().checkConnection().then(function (r) {
-      if (!r.ok) {
-        ui.conn.className = 'pill pill-bad';
-        ui.connText.textContent = '연결 안 됨';
-        ui.help.hidden = false;
-        ui.helpReason.textContent = r.host + ' 에 연결하지 못했습니다 (' + r.error + '). Ollama가 꺼져 있거나, 이 사이트 주소가 허용되지 않은 상태입니다.';
-        ui.missing.hidden = true;
-        log('연결 실패: ' + r.error, true);
-        return false;
-      }
-      if (r.missing.length) {
-        ui.conn.className = 'pill pill-bad';
-        ui.connText.textContent = '모델 ' + r.missing.length + '개 없음';
-        ui.help.hidden = false;
-        ui.helpReason.textContent = 'Ollama에는 연결됐지만 DARK CODE 모델 일부가 없습니다. setup-darkcode-ai.bat 을 실행해 주세요.';
-        ui.missing.hidden = false;
-        ui.missing.textContent = '없는 모델: ' + r.missing.join(', ');
-        log('누락 모델: ' + r.missing.join(', '), true);
+  function probeRunning(host) {
+    // CORS로 막혀도 Ollama가 켜져 있으면 no-cors 요청은 성공한다
+    return fetch(host + '/api/version', { mode: 'no-cors', cache: 'no-store' }).then(function () { return true; }, function () { return false; });
+  }
+
+  function showConnect(state, detail) {
+    ui.help.hidden = false;
+    var installed = localStorage.getItem(LS_CONNECTOR) === '1';
+    cx.start.hidden = !(state === 'off' && installed && OS === 'win');
+    if (state === 'off') {
+      cx.title.textContent = installed ? 'Ollama가 꺼져 있어요' : 'Ollama 연결이 필요해요';
+      ui.helpReason.textContent = installed
+        ? '[Ollama 켜기]를 누르면 바로 켜집니다. (처음 한 번 브라우저가 앱 열기를 물으면 허용)'
+        : '내 PC에서 Ollama가 실행 중이 아니거나 설치되어 있지 않습니다. 아래 버튼 하나로 설치부터 연결까지 자동으로 처리됩니다.';
+    } else if (state === 'blocked') {
+      cx.title.textContent = 'Ollama는 켜져 있어요. 접속 허용만 하면 돼요';
+      ui.helpReason.textContent = '보안 설정 때문에 이 사이트가 Ollama를 부르지 못하고 있습니다. 아래 버튼을 한 번 실행하면 허용 설정과 재시작이 자동으로 됩니다.';
+    } else if (state === 'models') {
+      cx.title.textContent = 'DARK CODE 모델 준비가 필요해요';
+      ui.helpReason.textContent = 'Ollama에는 연결됐지만 전용 모델 일부가 없습니다. 아래 버튼을 실행하면 없는 모델만 자동으로 만듭니다.';
+    }
+    ui.missing.hidden = !detail;
+    ui.missing.textContent = detail || '';
+    startPolling();
+  }
+
+  function setPill(cls, text) { ui.conn.className = 'pill ' + cls; ui.connText.textContent = text; }
+
+  function checkConn(silent) {
+    if (!silent) setPill('pill-wait', 'Ollama 확인 중');
+    var o = orch();
+    return o.checkConnection().then(function (r) {
+      if (r.ok && !r.missing.length) {
+        if (connState !== 'ok') log('Ollama 연결 OK (' + r.host + '), 모델 6개 확인');
+        if (connState && connState !== 'ok') { cx.live.innerHTML = '<span class="dot"></span>연결됨'; }
+        connState = 'ok';
+        setPill('pill-ok', 'Ollama 연결됨 · 모델 6/6');
+        ui.help.hidden = true;
+        stopPolling();
         return true;
       }
-      ui.conn.className = 'pill pill-ok';
-      ui.connText.textContent = 'Ollama 연결됨 · 모델 6/6';
-      ui.help.hidden = true;
-      log('Ollama 연결 OK (' + r.host + '), 모델 6개 확인');
-      return true;
+      if (r.ok) {
+        if (connState !== 'models') log('누락 모델: ' + r.missing.join(', '), true);
+        connState = 'models';
+        setPill('pill-bad', '모델 ' + r.missing.length + '개 없음');
+        showConnect('models', '없는 모델: ' + r.missing.join(', '));
+        return true;
+      }
+      return probeRunning(o.host).then(function (running) {
+        var st = running ? 'blocked' : 'off';
+        if (connState !== st) log(running ? 'Ollama 실행 중이지만 이 사이트 접속이 허용되지 않음' : 'Ollama에 연결할 수 없음 (꺼짐 또는 미설치)', true);
+        connState = st;
+        setPill('pill-bad', running ? '접속 허용 필요' : '연결 안 됨');
+        showConnect(st, '');
+        return false;
+      });
     });
   }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function () { if (!document.hidden && !running) checkConn(true); }, 3000);
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  cx.start.addEventListener('click', function () {
+    cx.live.innerHTML = '<span class="dot"></span>켜는 중...';
+    log('Ollama 켜기 요청 (darkcode-ollama://start)');
+    window.location.href = 'darkcode-ollama://start';
+    startPolling();
+  });
+  cx.connect.addEventListener('click', function () {
+    log('원클릭 연결 파일 다운로드 → 더블클릭해서 실행하세요');
+    cx.live.innerHTML = '<span class="dot"></span>실행 기다리는 중';
+    startPolling();
+  });
+  cx.copyMain.addEventListener('click', function () {
+    navigator.clipboard.writeText(CMD_UNIX).then(function () {
+      cx.copyMain.textContent = '복사됨! 터미널에 붙여넣으세요';
+      cx.live.innerHTML = '<span class="dot"></span>실행 기다리는 중';
+      setTimeout(setupConnectUI, 2500);
+    });
+    startPolling();
+  });
 
   /* ---------- 실행 ---------- */
   function setRunning(on) {
@@ -351,7 +437,7 @@
   ui.run.addEventListener('click', run);
   ui.stop.addEventListener('click', function () { if (running) running.abort(); });
   ui.prompt.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); } });
-  ui.conn.addEventListener('click', checkConn);
+  ui.conn.addEventListener('click', function () { checkConn(false); });
   $('settingsBtn').addEventListener('click', function () { ui.settings.hidden = !ui.settings.hidden; });
   ui.host.addEventListener('change', function () { save(LS_HOST, ui.host.value.trim()); checkConn(); });
   $('newChatBtn').addEventListener('click', function () {
@@ -408,7 +494,14 @@
   if (savedHost) ui.host.value = savedHost;
   var opts = load(LS_OPTS, null);
   if (opts) { ui.maxRev.value = opts.maxRev || '2'; ui.saveMem.checked = opts.saveMem !== false; }
+  if (/[?&]connected=1/.test(location.search)) {
+    localStorage.setItem(LS_CONNECTOR, '1');
+    history.replaceState(null, '', location.pathname);
+    log('원클릭 연결 도구 설치 완료. 다음부터는 [Ollama 켜기] 버튼으로 켤 수 있어요.');
+  }
+  setupConnectUI();
   renderState(lastState);
   renderHistory();
   checkConn();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && connState !== 'ok') checkConn(true); });
 })();
