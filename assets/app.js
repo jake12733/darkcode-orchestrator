@@ -273,7 +273,7 @@
       cx.title.textContent = installed ? 'Ollama가 꺼져 있어요' : 'Ollama 연결이 필요해요';
       ui.helpReason.textContent = installed
         ? '[Ollama 켜기]를 누르면 바로 켜집니다. (처음 한 번 브라우저가 앱 열기를 물으면 허용)'
-        : '내 PC에서 Ollama가 실행 중이 아니거나 설치되어 있지 않습니다. 아래 버튼 하나로 설치부터 연결까지 자동으로 처리됩니다.';
+        : 'Ollama가 꺼져 있거나, 아직 이 사이트와 연결 설정이 안 된 상태입니다. 아래 버튼 하나로 설치 확인부터 연결까지 자동으로 처리됩니다.';
     } else if (state === 'permission') {
       cx.title.textContent = '브라우저에서 [허용]만 눌러 주세요';
       ui.helpReason.innerHTML = '브라우저가 이 사이트의 <b>로컬 네트워크 기기 접근</b>을 허용할지 묻고 있어요. 주소창 아래에 뜬 창에서 <b>허용</b>을 누르면 바로 연결됩니다. 창이 안 보이면 주소창 왼쪽 아이콘 → 사이트 설정 → 로컬 네트워크 액세스 → 허용. 그래도 안 되면 아래 원클릭 연결을 실행하세요.';
@@ -320,7 +320,7 @@
       }
       return probeRunning(o.host).then(function (running) {
         var st = running ? 'blocked' : 'off';
-        if (connState !== st) log(running ? 'Ollama 실행 중이지만 이 사이트 접속이 허용되지 않음' : 'Ollama에 연결할 수 없음 (꺼짐 또는 미설치)', true);
+        if (connState !== st) log(running ? 'Ollama 실행 중이지만 이 사이트 접속이 허용되지 않음' : 'Ollama에 연결할 수 없음 (꺼짐 또는 연결 설정 필요)', true);
         connState = st;
         setPill('pill-bad', running ? '접속 허용 필요' : '연결 안 됨');
         showConnect(st, '');

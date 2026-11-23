@@ -61,7 +61,7 @@ header, main, footer { position: relative; z-index: 1; }
 .cx-main { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 10px; }
 .btn.big { font-size: 17px; padding: 14px 26px; border-radius: 12px; text-decoration: none; box-shadow: 0 0 24px rgba(0,255,102,.35); }
 .btn.big:hover { box-shadow: 0 0 34px rgba(0,255,102,.6); }
-#cxStart + #cxConnect:not([hidden]) { background: transparent; color: var(--neon); box-shadow: none; }
+#cxStart:not([hidden]) + #cxConnect { background: transparent; color: var(--neon); box-shadow: none; }
 .cx-sub { margin: 0; font-size: 14px; color: var(--text); opacity: .85; }
 .cx-more { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .cx-more summary { cursor: pointer; color: var(--muted); font-size: 13px; }
