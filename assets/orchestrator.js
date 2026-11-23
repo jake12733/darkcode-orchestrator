@@ -106,6 +106,14 @@
     if (OMISSION_RE.test(output)) {
       fixes.push('생략 표현(// 중략, TODO, 나머지 동일 등) 제거 → 해당 부분을 완전한 내용으로 채워 전체 출력');
     }
+    var prose = stripCode(output);
+    var han = prose.match(/[\u4E00-\u9FFF]+/g);
+    if (han && han.length) {
+      fixes.push('중국어 한자(' + han.slice(0, 3).join(', ') + ') → 자연스러운 한국어 표현으로 바꿔 쓰기');
+    }
+    if (target === 'media' && /(man|woman|male|female|person|people|girl|boy|doctor|assistant|patient|staff|model)\b/i.test(prose) && !/korean/i.test(prose)) {
+      fixes.push('[고정 묘사 블록]과 생성 프롬프트의 인물 묘사 → Korean을 명시 (예: a Korean woman in her 30s)');
+    }
     if (target === 'qa' && /\[\d+\]/.test(output)) {
       fixes.push('[참고 자료]가 없으므로 [1] 같은 출처 번호 삭제');
     }
@@ -117,6 +125,8 @@
     }
     return fixes;
   }
+
+  function stripCode(s) { return String(s || '').replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]*`/g, ' '); }
 
   /* ---------- 결과 요약 (토큰 0) ---------- */
   function summarize(target, text) {
