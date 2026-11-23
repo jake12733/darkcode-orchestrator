@@ -162,7 +162,9 @@ select { padding: 4px 8px; font-size: 13px; }
 }
 @media (max-width: 560px) {
   .brand-sub { display: none; }
-  .node { min-width: 92px; padding: 8px; }
+  .pipeline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow: visible; }
+  .link { display: none; }
+  .node { min-width: 0; padding: 8px 10px; }
   .n-ico { display: none; }
   .node { grid-template-columns: 1fr; }
   .actions { width: 100%; }
