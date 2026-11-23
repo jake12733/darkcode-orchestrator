@@ -341,19 +341,57 @@
     window.location.href = 'darkcode-ollama://start';
     startPolling();
   });
-  cx.connect.addEventListener('click', function () {
-    log('원클릭 연결 파일 다운로드 → 더블클릭해서 실행하세요');
-    cx.live.innerHTML = '<span class="dot"></span>실행 기다리는 중';
+  function liveText(t) { cx.live.innerHTML = '<span class="dot"></span>' + t; }
+  function downloadConnector() {
+    var a = document.createElement('a'); a.href = 'connect/DARKCODE-Ollama-Connect.bat'; a.download = 'DARKCODE-Ollama-Connect.bat';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function runConnector(why) {
+    if (OS === 'win') {
+      downloadConnector();
+      cx.sub.textContent = why === 'install'
+        ? '연결 파일을 받았어요. 실행하면 Ollama 설치 → 접속 허용 → 모델 준비까지 자동으로 진행되고, 끝나면 이 화면이 저절로 바뀝니다. (파일 보관을 물으면 [유지], "Windows의 PC 보호"가 뜨면 [추가 정보 → 실행])'
+        : 'Ollama가 설치돼 있어요. 받은 파일을 실행하면 설치는 건너뛰고 접속 허용·모델 준비만 자동으로 진행됩니다.';
+    } else if (OS !== 'mobile') {
+      navigator.clipboard.writeText(CMD_UNIX).catch(function () {});
+      cx.sub.textContent = '명령어를 복사했어요. 터미널에 붙여넣고 Enter → ' + (why === 'install' ? 'Ollama 설치부터 연결까지 자동 진행됩니다.' : '접속 허용·모델 준비만 진행됩니다.');
+    }
+    liveText('실행 기다리는 중'); log('원클릭 연결 실행 (' + (why === 'install' ? 'Ollama 설치 포함' : '설정만') + ')');
     startPolling();
-  });
-  cx.copyMain.addEventListener('click', function () {
-    navigator.clipboard.writeText(CMD_UNIX).then(function () {
-      cx.copyMain.textContent = '복사됨! 터미널에 붙여넣으세요';
-      cx.live.innerHTML = '<span class="dot"></span>실행 기다리는 중';
-      setTimeout(setupConnectUI, 2500);
+  }
+  function askInstall() {
+    if (OS === 'mobile') return;
+    liveText('설치 확인 필요');
+    $('cxAsk').hidden = false;
+  }
+  function connectFlow() {
+    $('cxAsk').hidden = true;
+    liveText('확인 중...');
+    checkConn(true).then(function () {
+      if (connState === 'ok') { cx.sub.textContent = '이미 연결돼 있어요. 바로 시작합니다.'; return; }
+      if (connState === 'blocked' || connState === 'models') return runConnector('setup');
+      if (connState === 'permission') { cx.sub.textContent = '주소창 아래 "로컬 네트워크 기기 접근" 창에서 [허용]을 눌러 주세요.'; startPolling(); return; }
+      if (localStorage.getItem(LS_CONNECTOR) === '1' && OS === 'win') {
+        liveText('Ollama 켜는 중...');
+        window.location.href = 'darkcode-ollama://start';
+        var n = 0;
+        var t = setInterval(function () {
+          n++;
+          checkConn(true).then(function () {
+            if (connState === 'ok') { clearInterval(t); }
+            else if (connState === 'blocked' || connState === 'models') { clearInterval(t); runConnector('setup'); }
+            else if (n >= 5) { clearInterval(t); askInstall(); }
+          });
+        }, 2000);
+        return;
+      }
+      askInstall();
     });
-    startPolling();
-  });
+  }
+  cx.connect.addEventListener('click', function (e) { e.preventDefault(); connectFlow(); });
+  cx.copyMain.addEventListener('click', connectFlow);
+  $('cxAskYes').addEventListener('click', function () { $('cxAsk').hidden = true; runConnector('install'); });
+  $('cxAskNo').addEventListener('click', function () { $('cxAsk').hidden = true; cx.sub.textContent = '설치를 취소했어요. 필요할 때 [원클릭 연결]을 다시 눌러 주세요.'; });
 
   /* ---------- 실행 ---------- */
   function setRunning(on) {
