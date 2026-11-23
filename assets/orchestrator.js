@@ -363,6 +363,7 @@
           else source = 'ai-critic + auto-check';
           v.verdict = 'REVISE';
           v.fixes = merged;
+          v.score = Math.min(v.score || 6, 6);
         }
         var rd = { round: round, verdict: v.verdict, score: v.score, reason: v.reason, fixes: v.fixes, parsed: v.parsed, source: source, ms: now() - ts3 };
         result.rounds.push(rd);
