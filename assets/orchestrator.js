@@ -233,9 +233,12 @@
     return this.saveMemory ? 0 : '5m';
   };
 
-  DCOrchestrator.prototype.checkConnection = function () {
+  DCOrchestrator.prototype.checkConnection = function (timeoutMs) {
     var self = this;
-    return fetch(this.host + '/api/tags').then(function (res) {
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, timeoutMs || 5000) : null;
+    return fetch(this.host + '/api/tags', ctl ? { signal: ctl.signal, cache: 'no-store' } : undefined).then(function (res) {
+      if (timer) clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     }).then(function (data) {
@@ -243,7 +246,9 @@
       var missing = MODELS.filter(function (m) { return names.indexOf(m) === -1; });
       return { ok: true, missing: missing, host: self.host };
     }).catch(function (err) {
-      return { ok: false, error: err.message, host: self.host };
+      if (timer) clearTimeout(timer);
+      var timeout = err && err.name === 'AbortError';
+      return { ok: false, error: timeout ? 'timeout' : err.message, timeout: timeout, host: self.host };
     });
   };
 

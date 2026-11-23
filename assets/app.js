@@ -256,7 +256,9 @@
 
   function probeRunning(host) {
     // CORS로 막혀도 Ollama가 켜져 있으면 no-cors 요청은 성공한다
-    return fetch(host + '/api/version', { mode: 'no-cors', cache: 'no-store' }).then(function () { return true; }, function () { return false; });
+    var ctl = new AbortController();
+    var t = setTimeout(function () { ctl.abort(); }, 4000);
+    return fetch(host + '/api/version', { mode: 'no-cors', cache: 'no-store', signal: ctl.signal }).then(function () { clearTimeout(t); return true; }, function () { clearTimeout(t); return false; });
   }
 
   function showConnect(state, detail) {
@@ -268,6 +270,9 @@
       ui.helpReason.textContent = installed
         ? '[Ollama 켜기]를 누르면 바로 켜집니다. (처음 한 번 브라우저가 앱 열기를 물으면 허용)'
         : '내 PC에서 Ollama가 실행 중이 아니거나 설치되어 있지 않습니다. 아래 버튼 하나로 설치부터 연결까지 자동으로 처리됩니다.';
+    } else if (state === 'permission') {
+      cx.title.textContent = '브라우저에서 [허용]만 눌러 주세요';
+      ui.helpReason.innerHTML = '브라우저가 이 사이트의 <b>로컬 네트워크 기기 접근</b>을 허용할지 묻고 있어요. 주소창 아래에 뜬 창에서 <b>허용</b>을 누르면 바로 연결됩니다. 창이 안 보이면 주소창 왼쪽 아이콘 → 사이트 설정 → 로컬 네트워크 액세스 → 허용. 그래도 안 되면 아래 원클릭 연결을 실행하세요.';
     } else if (state === 'blocked') {
       cx.title.textContent = 'Ollama는 켜져 있어요. 접속 허용만 하면 돼요';
       ui.helpReason.textContent = '보안 설정 때문에 이 사이트가 Ollama를 부르지 못하고 있습니다. 아래 버튼을 한 번 실행하면 허용 설정과 재시작이 자동으로 됩니다.';
@@ -301,6 +306,13 @@
         setPill('pill-bad', '모델 ' + r.missing.length + '개 없음');
         showConnect('models', '없는 모델: ' + r.missing.join(', '));
         return true;
+      }
+      if (r.timeout) {
+        if (connState !== 'permission') log('브라우저가 로컬 Ollama 접근 허용을 기다리는 중', true);
+        connState = 'permission';
+        setPill('pill-wait', '브라우저 허용 대기');
+        showConnect('permission', '');
+        return false;
       }
       return probeRunning(o.host).then(function (running) {
         var st = running ? 'blocked' : 'off';
